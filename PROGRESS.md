@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Overall Progress: ~50% of core features, 0% of algorithmic experiments**
+**Overall Progress: ~60% of core features, FlashReranker implemented**
 
 The current implementation has a working Legal Advisor system that successfully provides Czech legal guidance using RAG (Retrieval-Augmented Generation). However, the implementation has evolved in a different direction than the original algorithmic focus proposed in the project plan. The system prioritizes practical functionality using LLM-based generation over the deterministic, graph-based algorithmic approach outlined in the proposal.
 
@@ -15,9 +15,10 @@ The current implementation has a working Legal Advisor system that successfully 
 2. **Preprocessing & Embeddings** - `data_prepros.py` with HuggingFace embeddings
    - Model: `paraphrase-multilingual-MiniLM-L12-v2`
    - GPU-aware loading (CUDA if available)
-3. **Vector Retrieval** - Pinecone vector database retrieves top-3 similar answers
-   - Cosine similarity search
+3. **Vector Retrieval** - Pinecone vector database with FlashRank reranking
+   - Retrieves top-15 candidates via cosine similarity search
    - ANN (Approximate Nearest Neighbor) indexing
+   - FlashRank reranking selects best top-3 from candidates
 4. **LangGraph Controller** - Structured conversation flow (`backend.py`)
    - State machine with routing logic
    - Query classification node
@@ -35,9 +36,15 @@ The current implementation has a working Legal Advisor system that successfully 
    - Výklad a běžná praxe (Interpretation & Common Practice)
    - Omezení a poznámky (Limitations & Disclaimers)
 
+4. **FlashRank Reranker** - Cross-encoder reranking for improved relevance
+   - Model: `ms-marco-MultiBERT-L-12` (multilingual, supports Czech)
+   - Singleton pattern for efficient model loading
+   - Graceful fallback if reranking fails
+
 #### Architecture
 - Vector similarity search (cosine similarity via Pinecone)
-- Multi-step LangGraph workflow: classify → route → retrieve → generate
+- Two-stage retrieval: ANN search (k=15) → FlashRank rerank → top-3
+- Multi-step LangGraph workflow: classify → route → retrieve → rerank → generate
 - GPU-aware embedding model loading
 - Logging and monitoring system with file rotation
 
@@ -45,10 +52,11 @@ The current implementation has a working Legal Advisor system that successfully 
 
 #### Critical Algorithmic Components
 
-1. **FlashReranker** - NOT implemented
+1. **FlashReranker** - ✅ IMPLEMENTED
    - **Plan**: Use FlashRank to provide initial scores for retrieved answers
-   - **Current**: Direct use of top-3 retrieval results without reranking
-   - **Impact**: Missing a key component for improving answer quality
+   - **Current**: Retrieves top-15 from Pinecone, reranks with FlashRank, selects top-3
+   - **Model**: `ms-marco-MultiBERT-L-12` (multilingual cross-encoder)
+   - **Location**: `backend.py` - `get_ranker()`, `rerank_documents()`, `genericRag()`
 
 2. **PageRank-Inspired Reranking Algorithm** - NOT implemented
    - **Plan**: Create graph of retrieved answers as nodes
@@ -87,7 +95,7 @@ The current implementation has a working Legal Advisor system that successfully 
 
 ### 2. Reranking Strategy
 - **Plan**: Custom graph-based PageRank algorithm (the main innovation)
-- **Implementation**: None - uses raw retrieval results from Pinecone
+- **Implementation**: FlashRank cross-encoder reranking (two-stage retrieval)
 
 ### 3. Response Generation
 - **Plan**: Return best-matched Q&A with short explanation
@@ -110,15 +118,14 @@ The current implementation has a working Legal Advisor system that successfully 
 
 ### 🟢 High Priority (Align with Original Vision)
 
-#### 1. FlashReranker Integration - **Reasonable**
-- **Complexity**: Low
-- **Value**: High (improves answer quality)
+#### 1. FlashReranker Integration - ✅ DONE
+- **Status**: Implemented
 - **Implementation**:
-  - Install `flashrank` library
-  - Modify `genericRag()` in `backend.py`
-  - Retrieve top-10 to top-20 from Pinecone
-  - Rerank to select top-3
-  - Compare results with/without reranking
+  - Installed `flashrank` library
+  - Added `get_ranker()` singleton and `rerank_documents()` helper
+  - Modified `genericRag()` to retrieve top-15, rerank, select top-3
+  - Model: `ms-marco-MultiBERT-L-12` (multilingual)
+  - Configuration in `backend.py`: `RERANK_ENABLED`, `INITIAL_RETRIEVAL_K`, `FINAL_K`
 
 #### 2. Confidence Scoring & Clarifying Questions - **Reasonable**
 - **Complexity**: Medium
@@ -176,12 +183,12 @@ The current implementation has a working Legal Advisor system that successfully 
 ### Goal is Academic Evaluation (Original Plan)
 Focus on these additions to align with proposal:
 
-1. ✅ **Add FlashReranker** - Essential for reranking pipeline
-2. ✅ **Implement PageRank reranking** - Core innovation from proposal
-3. ✅ **Create evaluation suite** - Required for validation
-4. ✅ **Add retrieval algorithm comparison** - Demonstrates algorithmic analysis
-5. ✅ **Measure and analyze complexity** - Academic requirement
-6. ✅ **Add confidence scoring** - Enables clarifying questions
+1. ✅ **Add FlashReranker** - DONE
+2. ⬜ **Implement PageRank reranking** - Core innovation from proposal
+3. ⬜ **Create evaluation suite** - Required for validation
+4. ⬜ **Add retrieval algorithm comparison** - Demonstrates algorithmic analysis
+5. ⬜ **Measure and analyze complexity** - Academic requirement
+6. ⬜ **Add confidence scoring** - Enables clarifying questions
 
 **Key deliverables for academic presentation**:
 - Flowcharts showing PageRank algorithm

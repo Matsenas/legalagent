@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
-from typing import Literal
+from typing import Literal, List
 from pydantic import BaseModel, Field
 from langchain_openai.chat_models import ChatOpenAI
 from operator import itemgetter
@@ -10,6 +10,10 @@ from typing_extensions import TypedDict
 from typing import Optional
 from data_prepros import *
 from dotenv import load_dotenv
+from flashrank import Ranker, RerankRequest
+import logging
+
+logger = logging.getLogger(__name__)
 load_dotenv()
 index_name= os.environ.get("INDEX_NAME")
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
@@ -17,8 +21,69 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 MODEL = os.environ.get("MODEL")
 emb_model = os.environ.get("EMB_MODEL")
 
+# Reranking configuration
+RERANK_ENABLED = True
+FLASHRANK_MODEL = "ms-marco-MultiBERT-L-12"
+INITIAL_RETRIEVAL_K = 15
+FINAL_K = 3
+
 
 llm = ChatOpenAI(model=MODEL,api_key=OPENAI_API_KEY)
+
+# FlashRank ranker singleton
+_cached_ranker = None
+
+def get_ranker():
+    """Lazy-load FlashRank ranker (singleton pattern)."""
+    global _cached_ranker
+    if _cached_ranker is None:
+        try:
+            _cached_ranker = Ranker(model_name=FLASHRANK_MODEL, max_length=512)
+            logger.info(f"FlashRank ranker initialized with model: {FLASHRANK_MODEL}")
+        except Exception as e:
+            logger.error(f"Failed to initialize FlashRank: {e}")
+            return None
+    return _cached_ranker
+
+def rerank_documents(query: str, docs: List, top_k: int = 3) -> List:
+    """
+    Rerank documents using FlashRank.
+
+    Args:
+        query: The user query
+        docs: List of LangChain Document objects
+        top_k: Number of documents to return after reranking
+
+    Returns:
+        List of reranked Document objects (top_k)
+    """
+    if not docs:
+        return docs
+
+    ranker = get_ranker()
+    if ranker is None:
+        logger.warning("Ranker unavailable, returning unranked docs")
+        return docs[:top_k]
+
+    try:
+        # Convert LangChain Documents to FlashRank passage format
+        passages = [{"id": i, "text": d.page_content, "meta": d.metadata}
+                    for i, d in enumerate(docs)]
+
+        rerank_request = RerankRequest(query=query, passages=passages)
+        results = ranker.rerank(rerank_request)
+
+        # Map back to original Document objects
+        reranked = []
+        for r in results[:top_k]:
+            doc = docs[r["id"]]
+            doc.metadata["rerank_score"] = r["score"]
+            reranked.append(doc)
+
+        return reranked
+    except Exception as e:
+        logger.error(f"Reranking failed: {e}")
+        return docs[:top_k]
 
 class GraphState(TypedDict):
     query: str
@@ -190,11 +255,12 @@ def irrelevant_query(query):
 def genericRag(state):
     query = state.get("query")
 
-    num_chunks = 3
+    # Determine retrieval parameters based on reranking config
+    initial_k = INITIAL_RETRIEVAL_K if RERANK_ENABLED else FINAL_K
     docsearch = load_pinecone(index_name)
     retriever = docsearch.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": num_chunks}
+        search_kwargs={"k": initial_k}
     )
 
     docs = retriever.invoke(query)
@@ -203,6 +269,17 @@ def genericRag(state):
         return {
             "generation": "K tomuto dotazu nemám k dispozici relevantní právní informace."
         }
+
+    # Apply reranking if enabled
+    if RERANK_ENABLED and len(docs) > FINAL_K:
+        try:
+            docs = rerank_documents(query, docs, top_k=FINAL_K)
+            logger.info(f"Reranked {initial_k} docs to top {FINAL_K}")
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}, using original top-{FINAL_K}")
+            docs = docs[:FINAL_K]
+    elif len(docs) > FINAL_K:
+        docs = docs[:FINAL_K]
 
     context = _combine_documents3(docs)
 
