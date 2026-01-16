@@ -10,7 +10,8 @@ from typing_extensions import TypedDict
 from typing import Optional
 from data_prepros import *
 from dotenv import load_dotenv
-from flashrank import Ranker, RerankRequest
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import FlashrankRerank
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,60 +31,49 @@ FINAL_K = 3
 
 llm = ChatOpenAI(model=MODEL,api_key=OPENAI_API_KEY)
 
-# FlashRank ranker singleton
-_cached_ranker = None
+# FlashRank compressor singleton
+_cached_compressor = None
 
-def get_ranker():
-    """Lazy-load FlashRank ranker (singleton pattern)."""
-    global _cached_ranker
-    if _cached_ranker is None:
+def get_flashrank_compressor():
+    """Lazy-load FlashRank compressor (singleton pattern)."""
+    global _cached_compressor
+    if _cached_compressor is None:
         try:
-            _cached_ranker = Ranker(model_name=FLASHRANK_MODEL, max_length=512)
-            logger.info(f"FlashRank ranker initialized with model: {FLASHRANK_MODEL}")
+            _cached_compressor = FlashrankRerank(
+                model=FLASHRANK_MODEL,
+                top_n=FINAL_K
+            )
+            logger.info(f"FlashRank compressor initialized with model: {FLASHRANK_MODEL}")
         except Exception as e:
-            logger.error(f"Failed to initialize FlashRank: {e}")
+            logger.error(f"Failed to initialize FlashRank compressor: {e}")
             return None
-    return _cached_ranker
+    return _cached_compressor
 
-def rerank_documents(query: str, docs: List, top_k: int = 3) -> List:
+def get_retriever(with_reranking: bool = True):
     """
-    Rerank documents using FlashRank.
+    Get retriever with optional FlashRank reranking.
 
     Args:
-        query: The user query
-        docs: List of LangChain Document objects
-        top_k: Number of documents to return after reranking
+        with_reranking: If True, wraps base retriever with FlashRank reranking
 
     Returns:
-        List of reranked Document objects (top_k)
+        Retriever (with or without compression)
     """
-    if not docs:
-        return docs
+    docsearch = load_pinecone(index_name)
+    base_retriever = docsearch.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": INITIAL_RETRIEVAL_K if with_reranking else FINAL_K}
+    )
 
-    ranker = get_ranker()
-    if ranker is None:
-        logger.warning("Ranker unavailable, returning unranked docs")
-        return docs[:top_k]
+    if with_reranking and RERANK_ENABLED:
+        compressor = get_flashrank_compressor()
+        if compressor:
+            return ContextualCompressionRetriever(
+                base_compressor=compressor,
+                base_retriever=base_retriever
+            )
 
-    try:
-        # Convert LangChain Documents to FlashRank passage format
-        passages = [{"id": i, "text": d.page_content, "meta": d.metadata}
-                    for i, d in enumerate(docs)]
-
-        rerank_request = RerankRequest(query=query, passages=passages)
-        results = ranker.rerank(rerank_request)
-
-        # Map back to original Document objects
-        reranked = []
-        for r in results[:top_k]:
-            doc = docs[r["id"]]
-            doc.metadata["rerank_score"] = r["score"]
-            reranked.append(doc)
-
-        return reranked
-    except Exception as e:
-        logger.error(f"Reranking failed: {e}")
-        return docs[:top_k]
+    return base_retriever
 
 class GraphState(TypedDict):
     query: str
@@ -255,14 +245,8 @@ def irrelevant_query(query):
 def genericRag(state):
     query = state.get("query")
 
-    # Determine retrieval parameters based on reranking config
-    initial_k = INITIAL_RETRIEVAL_K if RERANK_ENABLED else FINAL_K
-    docsearch = load_pinecone(index_name)
-    retriever = docsearch.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": initial_k}
-    )
-
+    # Get retriever with FlashRank reranking via LangChain ContextualCompressionRetriever
+    retriever = get_retriever(with_reranking=RERANK_ENABLED)
     docs = retriever.invoke(query)
 
     if not docs:
@@ -270,16 +254,9 @@ def genericRag(state):
             "generation": "K tomuto dotazu nemám k dispozici relevantní právní informace."
         }
 
-    # Apply reranking if enabled
-    if RERANK_ENABLED and len(docs) > FINAL_K:
-        try:
-            docs = rerank_documents(query, docs, top_k=FINAL_K)
-            logger.info(f"Reranked {initial_k} docs to top {FINAL_K}")
-        except Exception as e:
-            logger.error(f"Reranking failed: {e}, using original top-{FINAL_K}")
-            docs = docs[:FINAL_K]
-    elif len(docs) > FINAL_K:
-        docs = docs[:FINAL_K]
+    # Limit to FINAL_K documents (compression retriever should handle this, but ensure consistency)
+    docs = docs[:FINAL_K]
+    logger.info(f"Retrieved {len(docs)} documents (reranking={'enabled' if RERANK_ENABLED else 'disabled'})")
 
     context = _combine_documents3(docs)
 

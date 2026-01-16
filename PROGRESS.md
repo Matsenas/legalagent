@@ -54,9 +54,9 @@ The current implementation has a working Legal Advisor system that successfully 
 
 1. **FlashReranker** - ✅ IMPLEMENTED
    - **Plan**: Use FlashRank to provide initial scores for retrieved answers
-   - **Current**: Retrieves top-15 from Pinecone, reranks with FlashRank, selects top-3
+   - **Current**: Uses LangChain `ContextualCompressionRetriever` with `FlashrankRerank`
    - **Model**: `ms-marco-MultiBERT-L-12` (multilingual cross-encoder)
-   - **Location**: `backend.py` - `get_ranker()`, `rerank_documents()`, `genericRag()`
+   - **Location**: `backend.py` - `get_flashrank_compressor()`, `get_retriever()`, `genericRag()`
 
 2. **PageRank-Inspired Reranking Algorithm** - NOT implemented
    - **Plan**: Create graph of retrieved answers as nodes
@@ -78,13 +78,16 @@ The current implementation has a working Legal Advisor system that successfully 
    - **Current**: Only uses Pinecone ANN search
    - **Impact**: No experimental validation of algorithmic choices
 
-5. **Evaluation Framework** - NOT implemented
+5. **Evaluation Framework** - ✅ IMPLEMENTED
    - **Plan**: Measure accuracy/relevance of retrieved answers
    - **Plan**: Measure latency and algorithmic performance
-   - **Plan**: Complexity analysis of retrieval and ranking modules
-   - **Plan**: Test questions with correct answers
-   - **Current**: No evaluation metrics, test suite, or benchmarks
-   - **Impact**: Cannot validate system quality or compare approaches
+   - **Current**: `evaluation.py` module with:
+     - `RetrievalEvaluator` class for comparing methods
+     - Baseline vs FlashRank comparison
+     - Latency metrics (retrieval, reranking, total)
+     - 10 Czech legal test queries
+     - JSON report generation
+   - **Run**: `python evaluation.py`
 
 
 ## Key Differences
@@ -119,11 +122,11 @@ The current implementation has a working Legal Advisor system that successfully 
 ### 🟢 High Priority (Align with Original Vision)
 
 #### 1. FlashReranker Integration - ✅ DONE
-- **Status**: Implemented
+- **Status**: Implemented with LangChain integration
 - **Implementation**:
-  - Installed `flashrank` library
-  - Added `get_ranker()` singleton and `rerank_documents()` helper
-  - Modified `genericRag()` to retrieve top-15, rerank, select top-3
+  - Uses LangChain `ContextualCompressionRetriever` with `FlashrankRerank`
+  - `get_flashrank_compressor()` - singleton for FlashRank compressor
+  - `get_retriever(with_reranking)` - returns base or compressed retriever
   - Model: `ms-marco-MultiBERT-L-12` (multilingual)
   - Configuration in `backend.py`: `RERANK_ENABLED`, `INITIAL_RETRIEVAL_K`, `FINAL_K`
 
@@ -183,9 +186,9 @@ The current implementation has a working Legal Advisor system that successfully 
 ### Goal is Academic Evaluation (Original Plan)
 Focus on these additions to align with proposal:
 
-1. ✅ **Add FlashReranker** - DONE
+1. ✅ **Add FlashReranker** - DONE (LangChain integration)
 2. ⬜ **Implement PageRank reranking** - Core innovation from proposal
-3. ⬜ **Create evaluation suite** - Required for validation
+3. ✅ **Create evaluation suite** - DONE (`evaluation.py`)
 4. ⬜ **Add retrieval algorithm comparison** - Demonstrates algorithmic analysis
 5. ⬜ **Measure and analyze complexity** - Academic requirement
 6. ⬜ **Add confidence scoring** - Enables clarifying questions

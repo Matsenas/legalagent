@@ -21,3 +21,6 @@ logs/
 .vscode/
 .idea/
 .claude/
+
+# Evaluations
+evaluation_report*.json
