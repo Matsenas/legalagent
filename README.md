@@ -28,4 +28,4 @@ EMB_MODEL=your_embedding_model
 python server.py
 ```
 
-Server runs at `http://localhost:8000`. API docs at `/docs`.
+Server runs at `http://localhost:8000`. Simple interface at `/`. API docs at `/docs`.
