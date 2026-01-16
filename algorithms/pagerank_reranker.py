@@ -200,6 +200,13 @@ class PageRankReranker:
         ranked_indices = np.argsort(final_scores)[::-1]
 
         # Debug info for analysis
+        # Compute average pairwise similarity (upper triangle, excluding diagonal)
+        if k > 1:
+            upper_tri = similarity_matrix[np.triu_indices(k, k=1)]
+            avg_sim = float(np.mean(upper_tri)) if len(upper_tri) > 0 else 0.0
+        else:
+            avg_sim = 0.0
+
         debug_info = {
             "similarity_matrix": similarity_matrix,
             "adjacency_matrix": adjacency,
@@ -207,7 +214,7 @@ class PageRankReranker:
             "pagerank_scores": pagerank_scores,
             "score_history": score_history,
             "num_edges": np.sum(adjacency > 0),
-            "avg_similarity": np.mean(similarity_matrix[np.triu_indices(k, k=1)])
+            "avg_similarity": avg_sim
         }
 
         return ranked_indices[:top_k], final_scores, debug_info

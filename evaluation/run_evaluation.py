@@ -168,7 +168,7 @@ class RetrievalEvaluator:
         # Phase 1: ANN retrieval
         k = FINAL_K if method == "baseline" else INITIAL_RETRIEVAL_K
         start = time.time()
-        docs = self._retrieve_ann(query, exclude_titles, k)
+        docs, scores = self._retrieve_ann(query, exclude_titles, k)
         retrieval_ms = (time.time() - start) * 1000
 
         if method == "baseline" or len(docs) == 0:
@@ -179,19 +179,20 @@ class RetrievalEvaluator:
         if method == "flashrank":
             docs = self._rerank_flashrank(docs, query)
         elif method == "pagerank":
-            docs = self._rerank_pagerank(docs)
+            docs = self._rerank_pagerank(docs, scores)
         rerank_ms = (time.time() - start) * 1000
 
         return docs[:FINAL_K], retrieval_ms, rerank_ms
 
-    def _retrieve_ann(self, query: str, exclude_titles: set, k: int) -> List[Document]:
-        """Retrieve documents via Pinecone ANN search."""
-        retriever = self.docsearch.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": k + len(exclude_titles)}
-        )
-        docs = retriever.invoke(query)
-        return [d for d in docs if d.metadata.get('title') not in exclude_titles][:k]
+    def _retrieve_ann(self, query: str, exclude_titles: set, k: int) -> Tuple[List[Document], List[float]]:
+        """Retrieve documents via Pinecone ANN search with similarity scores."""
+        results = self.docsearch.similarity_search_with_score(query, k=k + len(exclude_titles))
+        # Filter out excluded titles and keep top k
+        filtered = [(doc, score) for doc, score in results
+                    if doc.metadata.get('title') not in exclude_titles][:k]
+        docs = [doc for doc, _ in filtered]
+        scores = [score for _, score in filtered]
+        return docs, scores
 
     def _rerank_flashrank(self, docs: List[Document], query: str) -> List[Document]:
         """Rerank using FlashRank cross-encoder."""
@@ -200,12 +201,12 @@ class RetrievalEvaluator:
             return list(reranked)
         return docs
 
-    def _rerank_pagerank(self, docs: List[Document]) -> List[Document]:
-        """Rerank using PageRank algorithm."""
+    def _rerank_pagerank(self, docs: List[Document], initial_scores: List[float]) -> List[Document]:
+        """Rerank using PageRank algorithm with query-aware initialization."""
         embeddings = self._get_embeddings(docs)
         ranked_indices, _, _ = self.pagerank_reranker.rerank(
             doc_embeddings=embeddings,
-            initial_scores=None,
+            initial_scores=np.array(initial_scores),
             top_k=len(docs)
         )
         return [docs[i] for i in ranked_indices]

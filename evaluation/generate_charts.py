@@ -61,7 +61,7 @@ def create_accuracy_chart(report: Dict[str, Any], output_path: Path):
     ax.set_title('Retrieval Accuracy: Top-1 vs Best-of-3', fontweight='bold', fontsize=12)
     ax.set_xticks(x)
     ax.set_xticklabels([LABELS.get(m, m) for m in methods])
-    ax.set_ylim(0, 1.0)
+    ax.set_ylim(0, 1)
     ax.legend()
 
     for bar, val in zip(bars1, top1_means):
@@ -109,25 +109,42 @@ def create_latency_chart(report: Dict[str, Any], output_path: Path):
 
 
 def create_tradeoff_chart(report: Dict[str, Any], output_path: Path):
-    """Scatter plot: Accuracy vs latency tradeoff."""
+    """Scatter plot: Accuracy vs latency tradeoff with Top-1 and Best-of-3."""
     metrics = report['metrics']
     methods = list(metrics.keys())
 
-    accuracy = [metrics[m]['avg_top1_similarity'] for m in methods]
+    top1_accuracy = [metrics[m]['avg_top1_similarity'] for m in methods]
+    best3_accuracy = [metrics[m]['avg_best3_similarity'] for m in methods]
     latency = [metrics[m]['avg_total_latency_ms'] for m in methods]
 
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     for i, m in enumerate(methods):
-        ax.scatter(latency[i], accuracy[i], s=200,
-                   c=COLORS.get(m, '#888'),
-                   edgecolors='black', linewidths=1, zorder=5)
-        ax.annotate(m.capitalize(), (latency[i], accuracy[i]),
-                    xytext=(8, 4), textcoords='offset points', fontweight='bold')
+        color = COLORS.get(m, '#888')
+
+        # Draw connecting line between Top-1 and Best-of-3
+        ax.plot([latency[i], latency[i]], [top1_accuracy[i], best3_accuracy[i]],
+                color=color, linewidth=2, alpha=0.5, zorder=3)
+
+        # Plot Top-1 marker (solid circle)
+        ax.scatter(latency[i], top1_accuracy[i], s=200,
+                   c=color, edgecolors='black', linewidths=1, zorder=5)
+
+        # Plot Best-of-3 marker (circle with diagonal stripes)
+        ax.scatter(latency[i], best3_accuracy[i], s=200,
+                   facecolors=color, edgecolors='black', linewidths=1, zorder=5,
+                   alpha=0.6, hatch='//')
+
+        # Single label per method, positioned to the right of the midpoint
+        mid_y = (top1_accuracy[i] + best3_accuracy[i]) / 2
+        ax.annotate(m.capitalize(), (latency[i], mid_y),
+                    xytext=(12, 0), textcoords='offset points',
+                    fontsize=10, fontweight='bold', va='center')
 
     ax.set_xlabel('Total Latency (ms)', fontweight='bold')
-    ax.set_ylabel('Top-1 Accuracy', fontweight='bold')
+    ax.set_ylabel('Accuracy (Cosine Similarity)', fontweight='bold')
     ax.set_title('Accuracy vs Latency Tradeoff', fontweight='bold', fontsize=12)
+    ax.set_ylim(0.5, 0.7)
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
