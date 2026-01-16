@@ -97,24 +97,8 @@ def load_pinecone(index_name):
 
 
 
-
-
-
-
-# data=pd.read_csv('/home/zain/Zain_Work/legalAgent/legal_advice_CZE.csv')
+# Populate Pinecone index
+# data=pd.read_csv('legal_advice_CZE.csv')
 # list_of_documents=data_preprocessing(data)
 # embeddings=create_embeddings()
 # insertion_to_vectorstore(list_of_documents, embeddings, INDEX_NAME)
-
-# from sentence_transformers import SentenceTransformer
-# sentences = ["This is an example sentence", "Each sentence is converted"]
-
-# model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
-# embeddings = model.encode(list_of_documents)
-# print(embeddings)
-
-
-
-
-
-
