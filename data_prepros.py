@@ -1,6 +1,6 @@
 import pandas as pd
 from langchain_core.documents import Document
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 # from pinecone import Pinecone
 import os
