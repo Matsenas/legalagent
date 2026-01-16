@@ -17,7 +17,7 @@ PINECONE_API_KEY=...
 INDEX_NAME=...
 ```
 
-## Evaluations & Methods
+## Evaluation
 
 All methods use **Pinecone ANN** as the first retrieval step.
 
