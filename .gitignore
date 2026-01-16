@@ -22,5 +22,11 @@ logs/
 .idea/
 .claude/
 
-# Evaluations
+# Evaluation outputs
+evaluation/results/
+evaluation/test_questions*.json
 evaluation_report*.json
+
+# macOS
+.DS_Store
+**/.DS_Store

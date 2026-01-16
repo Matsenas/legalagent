@@ -24,7 +24,7 @@ emb_model = os.environ.get("EMB_MODEL")
 
 # Reranking configuration
 RERANK_ENABLED = True
-FLASHRANK_MODEL = "ms-marco-MultiBERT-L-12"
+FLASHRANK_MODEL = "ms-marco-TinyBERT-L-2-v2"  # Fast model: ~220ms for 15 docs (was 5.4s with MultiBERT)
 INITIAL_RETRIEVAL_K = 15
 FINAL_K = 3
 
@@ -39,8 +39,14 @@ def get_flashrank_compressor():
     global _cached_compressor
     if _cached_compressor is None:
         try:
+            from flashrank import Ranker
+            # Create Ranker with optimized max_length (256 balances context vs speed)
+            ranker = Ranker(
+                model_name=FLASHRANK_MODEL,
+                max_length=256,
+            )
             _cached_compressor = FlashrankRerank(
-                model=FLASHRANK_MODEL,
+                client=ranker,
                 top_n=FINAL_K
             )
             logger.info(f"FlashRank compressor initialized with model: {FLASHRANK_MODEL}")
