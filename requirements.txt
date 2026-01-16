@@ -8,3 +8,5 @@ python-dotenv
 pandas
 torch
 sentence-transformers
+fastapi
+uvicorn

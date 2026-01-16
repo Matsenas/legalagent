@@ -12,7 +12,10 @@ load_dotenv()
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
 INDEX_NAME = os.environ.get("INDEX_NAME")
 # pc = Pinecone(api_key=PINECONE_API_KEY)
-logger = setup_logger("legal_agent", log_level=10) 
+logger = setup_logger("legal_agent", log_level=10)
+
+# Cached embedding function (loaded once, reused across requests)
+_cached_embed_fn = None 
 
 
 # def check_cuda():
@@ -52,16 +55,21 @@ def create_embeddings():
         logger.error(f"Error in creating embeddings: {e}")
 
 def get_embed_fn():
+    global _cached_embed_fn
+    if _cached_embed_fn is not None:
+        logger.info("Using cached embed function")
+        return _cached_embed_fn
+
     try:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         model_kwargs = {"device": device}
-        embed_fn = HuggingFaceEmbeddings(
+        _cached_embed_fn = HuggingFaceEmbeddings(
             model_name=model_name,
             model_kwargs=model_kwargs
         )
         logger.info("Embed function created successfully")
-        return embed_fn
+        return _cached_embed_fn
     except Exception as e:
         logger.error(f"Error in creating embed function: {e}")
 

@@ -302,6 +302,3 @@ def chatbot_interactor_generator(query):
     graph_app = graph_builder()
     response = graph_app.invoke(input)
     return response
-
-
-ans=chatbot_interactor_generator(" Dobrý den! Pokud máte právní dotaz, rád vám pomohu.")

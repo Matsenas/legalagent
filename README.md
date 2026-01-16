@@ -21,3 +21,11 @@ OPENAI_API_KEY=your_key
 MODEL=gpt-4o
 EMB_MODEL=your_embedding_model
 ```
+
+## Running
+
+```bash
+python server.py
+```
+
+Server runs at `http://localhost:8000`. API docs at `/docs`.
