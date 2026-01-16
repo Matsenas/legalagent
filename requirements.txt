@@ -1,0 +1,10 @@
+langchain-core
+langchain-community
+langchain-openai
+langchain-pinecone
+langgraph
+pydantic
+python-dotenv
+pandas
+torch
+sentence-transformers
